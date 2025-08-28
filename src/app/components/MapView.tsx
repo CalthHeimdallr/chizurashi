@@ -18,27 +18,23 @@ type Marker = {
   lon: number;
   kind: Mode;
   text: string;
+  author: string;      // 署名
+  createdAt: string;   // ISO文字列
 };
 
 export default function MapView() {
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [mode, setMode] = useState<Mode>('haiku');
 
-  // 句の分割入力（短歌は4,5句も使う）
-  const [lines, setLines] = useState({
-    l1: '',
-    l2: '',
-    l3: '',
-    l4: '',
-    l5: '',
-  });
+  // 句の分割入力
+  const [lines, setLines] = useState({ l1: '', l2: '', l3: '', l4: '', l5: '' });
 
-  // クリックで選んだ座標を保持
-  const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(
-    null
-  );
+  // 署名
+  const [author, setAuthor] = useState<string>('');
 
-  // 地図クリックで位置を決める
+  // クリックで選んだ座標
+  const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(null);
+
   function Clicker() {
     useMapEvents({
       click(e: LeafletMouseEvent) {
@@ -53,10 +49,7 @@ export default function MapView() {
     lines.l1.trim() !== '' &&
     lines.l2.trim() !== '' &&
     lines.l3.trim() !== '' &&
-    (mode === 'haiku' ||
-      (mode === 'tanka' &&
-        lines.l4.trim() !== '' &&
-        lines.l5.trim() !== ''));
+    (mode === 'haiku' || (mode === 'tanka' && lines.l4.trim() !== '' && lines.l5.trim() !== ''));
 
   const handleChange =
     (key: keyof typeof lines) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -64,7 +57,7 @@ export default function MapView() {
 
   const handleSubmit = () => {
     if (!tempPos) return;
-    // 表示用テキストを結合（改行区切り）
+
     const prepared =
       mode === 'haiku'
         ? [lines.l1, lines.l2, lines.l3]
@@ -74,119 +67,141 @@ export default function MapView() {
 
     const id = Date.now();
     setMarkers((m) => [
-      { id, lat: tempPos.lat, lon: tempPos.lon, kind: mode, text },
+      {
+        id,
+        lat: tempPos.lat,
+        lon: tempPos.lon,
+        kind: mode,
+        text,
+        author: author.trim() || '無署名',
+        createdAt: new Date().toISOString(),
+      },
       ...m,
     ]);
 
-    // 入力リセット（位置は残す or 消すは好み。ここでは残す）
+    // 入力リセット（位置はそのまま残す）
     setLines({ l1: '', l2: '', l3: '', l4: '', l5: '' });
+    // 署名は続けて使う前提で残す（消したい場合は下の行のコメントを外す）
+    // setAuthor('');
   };
 
-   return (
+  const verticalTextStyle: React.CSSProperties = {
+    margin: 0,
+    whiteSpace: 'pre-wrap',
+    lineHeight: 1.6,
+    writingMode: 'vertical-rl',   // ← 縦書き
+    textOrientation: 'mixed',     // ← 句読点や英数の扱いを自然に
+    fontSize: 16,
+  };
+
+  const metaRowStyle: React.CSSProperties = {
+    display: 'flex',
+    gap: 8,
+    alignItems: 'center',
+    marginTop: 8,
+    fontSize: 12,
+    color: '#555',
+    flexWrap: 'wrap',
+  };
+
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleString('ja-JP', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+  return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
       <MapContainer
         center={[35.681, 139.767]}
         zoom={13}
-        style={{ height: '100%', width: '100%', zIndex: 0 }} // ← 追加
+        style={{ height: '100%', width: '100%', zIndex: 0 }}
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Clicker />
-        {tempPos && (
-          <CircleMarker center={[tempPos.lat, tempPos.lon]} radius={8} />
-        )}
+        {tempPos && <CircleMarker center={[tempPos.lat, tempPos.lon]} radius={8} />}
         {markers.map((m) => (
           <CircleMarker key={m.id} center={[m.lat, m.lon]} radius={6}>
-            <Popup>
+            <Popup maxWidth={320}>
               <p style={{ margin: 0, fontWeight: 600 }}>
                 {m.kind === 'haiku' ? '俳句' : '短歌'}
               </p>
-              <pre
-                style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}
-              >
-                {m.text}
-              </pre>
+
+              {/* 縦書きの本文 */}
+              <div style={{ marginTop: 6, display: 'inline-block' }}>
+                <pre style={verticalTextStyle}>{m.text}</pre>
+              </div>
+
+              {/* メタ情報（横組みで見やすく） */}
+              <div style={metaRowStyle}>
+                <span>— {m.author}</span>
+                <span>·</span>
+                <span>{formatDate(m.createdAt)}</span>
+              </div>
             </Popup>
           </CircleMarker>
         ))}
       </MapContainer>
 
-            {/* コンポーズパネル（固定／下部） */}
+      {/* 入力HUD（画面固定） */}
       <div
         style={{
-          position: 'fixed',                  // ← absolute から fixed に
-          left: 12,                           // 画面端に少し余白
+          position: 'fixed',
+          left: 12,
           right: 12,
-          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)', // iOS安全域対応
-          zIndex: 1000,                       // ← 地図より前面に
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)',
+          zIndex: 1000,
           padding: '12px',
           background: 'rgba(255,255,255,0.96)',
           backdropFilter: 'blur(6px)',
           borderRadius: 12,
           boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
-          pointerEvents: 'auto',              // 念のためクリック可能に
+          pointerEvents: 'auto',
         }}
       >
-
-        <div
-          style={{
-            maxWidth: 880,
-            margin: '0 auto',
-            display: 'grid',
-            gap: 8,
-          }}
-        >
-          {/* モード切替 */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <label style={{ fontWeight: 600 }}>形式</label>
+        <div style={{ maxWidth: 880, margin: '0 auto', display: 'grid', gap: 8 }}>
+          {/* モード切替 & 現在位置 */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
                 type="button"
                 onClick={() => setMode('haiku')}
                 aria-pressed={mode === 'haiku'}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  border:
-                    mode === 'haiku' ? '2px solid #111' : '1px solid #ccc',
-                  background: mode === 'haiku' ? '#111' : '#fff',
-                  color: mode === 'haiku' ? '#fff' : '#111',
-                  cursor: 'pointer',
-                }}
+                style={modeBtnStyle(mode === 'haiku')}
               >
-                俳句を入力（5-7-5）
+                俳句（5-7-5）
               </button>
               <button
                 type="button"
                 onClick={() => setMode('tanka')}
                 aria-pressed={mode === 'tanka'}
-                style={{
-                  padding: '6px 10px',
-                  borderRadius: 8,
-                  border:
-                    mode === 'tanka' ? '2px solid #111' : '1px solid #ccc',
-                  background: mode === 'tanka' ? '#111' : '#fff',
-                  color: mode === 'tanka' ? '#fff' : '#111',
-                  cursor: 'pointer',
-                }}
+                style={modeBtnStyle(mode === 'tanka')}
               >
-                短歌を入力（5-7-5-7-7）
+                短歌（5-7-5-7-7）
               </button>
             </div>
             <div style={{ marginLeft: 'auto', fontSize: 12, color: '#444' }}>
               {tempPos
-                ? `選択位置: ${tempPos.lat.toFixed(5)}, ${tempPos.lon.toFixed(5)}（地図をクリックで変更）`
+                ? `選択位置: ${tempPos.lat.toFixed(5)}, ${tempPos.lon.toFixed(5)}`
                 : '地図をクリックして場所を選択'}
             </div>
           </div>
 
+          {/* 署名 */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              placeholder="署名（例：芭蕉）"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+
           {/* 句入力欄 */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr',
-              gap: 6,
-            }}
-          >
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
             <input
               placeholder="一句目（例：古池や）"
               value={lines.l1}
@@ -238,11 +253,7 @@ export default function MapView() {
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
                 fontWeight: 700,
               }}
-              title={
-                tempPos
-                  ? ''
-                  : '投稿する前に、地図をクリックして場所を選んでください'
-              }
+              title={!tempPos ? '投稿前に地図をクリックして場所を選んでください' : ''}
             >
               この場所に詠む
             </button>
@@ -261,4 +272,14 @@ const inputStyle: React.CSSProperties = {
   borderRadius: 10,
   border: '1px solid #ddd',
   outline: 'none',
+  width: '100%',
 };
+
+const modeBtnStyle = (active: boolean): React.CSSProperties => ({
+  padding: '6px 10px',
+  borderRadius: 8,
+  border: active ? '2px solid #111' : '1px solid #ccc',
+  background: active ? '#111' : '#fff',
+  color: active ? '#fff' : '#111',
+  cursor: 'pointer',
+});
