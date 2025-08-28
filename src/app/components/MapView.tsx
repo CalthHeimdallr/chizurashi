@@ -5,16 +5,24 @@ import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'reac
 import type { LeafletMouseEvent } from 'leaflet';
 import { supabase } from '../../lib/supabaseClient';
 
-// 途中…
-if (!supabase) {
-  // 本番で環境変数未設定のとき、落ちずに通知を出す
-  return (
-    <div style={{padding:16}}>
-      <h3>設定が必要です</h3>
-      <p>Vercel の Environment Variables に <code>NEXT_PUBLIC_SUPABASE_URL</code> と <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> を追加し、再デプロイしてください。</p>
-    </div>
-  );
+export default function MapView() {
+  // supabase が存在しなければ警告画面を返す
+  if (!supabase) {
+    return (
+      <div style={{ padding: 16 }}>
+        <h3>設定が必要です</h3>
+        <p>
+          Vercel の Environment Variables に <code>NEXT_PUBLIC_SUPABASE_URL</code> と{' '}
+          <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code> を追加し、再デプロイしてください。
+        </p>
+      </div>
+    );
+  }
+
+  // ここから通常の処理（useState, useEffect, MapContainer など）
+  // …
 }
+
 
 
 type Mode = 'haiku' | 'tanka';
