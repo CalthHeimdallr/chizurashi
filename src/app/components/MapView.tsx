@@ -1,14 +1,22 @@
 'use client';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
+
 import { useState } from 'react';
-import { LeafletMouseEvent } from 'leaflet';   // ← 追加
 
 export default function MapView() {
   const [markers, setMarkers] = useState<{lat:number; lon:number; text:string}[]>([]);
 
+  // サーバー側では何も描画しない
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  // クライアントでだけ react-leaflet を読み込む
+  const { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } = require('react-leaflet');
+  const { LeafletMouseEvent } = require('leaflet');
+
   function Clicker() {
     useMapEvents({
-      click(e: LeafletMouseEvent) {   // ← 型を指定
+      click(e: typeof LeafletMouseEvent) {
         const text = prompt('この場所に詠む（俳句/短歌/断片）');
         if (text && text.trim()) {
           setMarkers(m => [{ lat: e.latlng.lat, lon: e.latlng.lng, text }, ...m]);
