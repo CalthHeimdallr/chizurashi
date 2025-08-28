@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase } from '../../lib/supabaseClient';
 
 type Mode = 'haiku' | 'tanka';
 
