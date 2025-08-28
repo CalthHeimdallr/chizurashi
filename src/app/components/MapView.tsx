@@ -82,12 +82,12 @@ export default function MapView() {
     setLines({ l1: '', l2: '', l3: '', l4: '', l5: '' });
   };
 
-  return (
-    <div style={{ position: 'relative', width: '100%', height: '80vh' }}>
+   return (
+    <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
       <MapContainer
         center={[35.681, 139.767]}
         zoom={13}
-        style={{ height: '100%', width: '100%' }}
+        style={{ height: '100%', width: '100%', zIndex: 0 }} // ← 追加
       >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Clicker />
@@ -110,19 +110,23 @@ export default function MapView() {
         ))}
       </MapContainer>
 
-      {/* コンポーズパネル（固定／下部） */}
+            {/* コンポーズパネル（固定／下部） */}
       <div
         style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
+          position: 'fixed',                  // ← absolute から fixed に
+          left: 12,                           // 画面端に少し余白
+          right: 12,
+          bottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)', // iOS安全域対応
+          zIndex: 1000,                       // ← 地図より前面に
           padding: '12px',
-          background: 'rgba(255,255,255,0.92)',
+          background: 'rgba(255,255,255,0.96)',
           backdropFilter: 'blur(6px)',
-          boxShadow: '0 -6px 24px rgba(0,0,0,0.08)',
+          borderRadius: 12,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.12)',
+          pointerEvents: 'auto',              // 念のためクリック可能に
         }}
       >
+
         <div
           style={{
             maxWidth: 880,
