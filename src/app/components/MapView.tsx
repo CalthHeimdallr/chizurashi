@@ -19,7 +19,41 @@ type PoemRow = {
 };
 
 export default function MapView() {
-  // Supabase が未設定の場合はエラーメッセージを返す
+  // Hooks を必ず最初に呼び出す
+  const [poems, setPoems] = useState<PoemRow[]>([]);
+  const [mode, setMode] = useState<Mode>('haiku');
+  const [lines, setLines] = useState({ l1: '', l2: '', l3: '', l4: '', l5: '' });
+  const [author, setAuthor] = useState<string>('');
+  const [myName, setMyName] = useState<string>('');
+  const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(null);
+
+  // 固定署名の読み込み
+  useEffect(() => {
+    const saved = (typeof window !== 'undefined' && localStorage.getItem('chizurashi_myName')) || '';
+    if (saved) {
+      setMyName(saved);
+      setAuthor(saved);
+    }
+  }, []);
+
+  // 投稿一覧を取得
+  useEffect(() => {
+    if (!supabase) return;
+    const fetchPoems = async () => {
+      const { data, error } = await supabase
+        .from('poems')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error(error);
+      } else {
+        setPoems((data || []).map((r) => ({ ...r, likes: r.likes ?? [] })));
+      }
+    };
+    fetchPoems();
+  }, []);
+
+  // supabase 未設定ならエラーを表示（Hooks のあとで return）
   if (!supabase) {
     return (
       <div style={{ padding: 16 }}>
@@ -32,39 +66,7 @@ export default function MapView() {
     );
   }
 
-  const [poems, setPoems] = useState<PoemRow[]>([]);
-  const [mode, setMode] = useState<Mode>('haiku');
-  const [lines, setLines] = useState({ l1: '', l2: '', l3: '', l4: '', l5: '' });
-  const [author, setAuthor] = useState<string>('');
-  const [myName, setMyName] = useState<string>('');
-  const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(null);
-
-  // 固定署名を localStorage から読み込み
-  useEffect(() => {
-    const saved = (typeof window !== 'undefined' && localStorage.getItem('chizurashi_myName')) || '';
-    if (saved) {
-      setMyName(saved);
-      setAuthor(saved);
-    }
-  }, []);
-
-  // 投稿一覧を Supabase から取得
-  useEffect(() => {
-    const fetchPoems = async () => {
-      const { data, error } = await supabase
-        .from('poems')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) {
-        console.error(error);
-        alert('投稿の取得に失敗しました: ' + error.message);
-      } else {
-        setPoems((data || []).map((r) => ({ ...r, likes: r.likes ?? [] })));
-      }
-    };
-    fetchPoems();
-  }, []);
-
+  // クリック位置を記録
   function Clicker() {
     useMapEvents({
       click(e: LeafletMouseEvent) {
