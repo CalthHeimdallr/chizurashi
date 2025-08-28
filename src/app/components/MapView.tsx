@@ -94,15 +94,16 @@ export default function MapView() {
     fontSize: 16,
   };
 
-  const metaRowStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 8,
-    alignItems: 'center',
-    marginTop: 8,
-    fontSize: 12,
-    color: '#555',
-    flexWrap: 'wrap',
-  };
+  const metaVerticalStyle: React.CSSProperties = {
+  marginTop: 8,
+  display: 'inline-block',
+  writingMode: 'vertical-rl',
+  textOrientation: 'mixed',
+  lineHeight: 1.6,
+  fontSize: 12,
+  color: '#333', // 少し濃い
+};
+
 
   const formatDate = (iso: string) =>
     new Date(iso).toLocaleString('ja-JP', {
@@ -135,12 +136,12 @@ export default function MapView() {
                 <pre style={verticalTextStyle}>{m.text}</pre>
               </div>
 
-              {/* メタ情報（横組みで見やすく） */}
-              <div style={metaRowStyle}>
-                <span>— {m.author}</span>
-                <span>·</span>
-                <span>{formatDate(m.createdAt)}</span>
-              </div>
+{/* 署名・日付も縦書きで表示 */}
+<div style={metaVerticalStyle}>
+  <span>— {m.author}</span>
+  {'\n'}
+  <span>{formatDate(m.createdAt)}</span>
+</div>
             </Popup>
           </CircleMarker>
         ))}
@@ -203,39 +204,54 @@ export default function MapView() {
           {/* 句入力欄 */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 6 }}>
             <input
-              placeholder="一句目（例：古池や）"
-              value={lines.l1}
-              onChange={handleChange('l1')}
-              style={inputStyle}
-            />
-            <input
-              placeholder="二句目（例：蛙飛びこむ）"
-              value={lines.l2}
-              onChange={handleChange('l2')}
-              style={inputStyle}
-            />
-            <input
-              placeholder="三句目（例：水の音）"
-              value={lines.l3}
-              onChange={handleChange('l3')}
-              style={inputStyle}
-            />
-            {mode === 'tanka' && (
-              <>
-                <input
-                  placeholder="四句目"
-                  value={lines.l4}
-                  onChange={handleChange('l4')}
-                  style={inputStyle}
-                />
-                <input
-                  placeholder="五句目"
-                  value={lines.l5}
-                  onChange={handleChange('l5')}
-                  style={inputStyle}
-                />
-              </>
-            )}
+  className="poem-input"                         // ← 追加
+  placeholder="一句目（例：古池や）"
+  value={lines.l1}
+  onChange={handleChange('l1')}
+  style={inputStyle}
+/>
+
+<input
+  className="poem-input"
+  placeholder="二句目（例：蛙飛びこむ）"
+  value={lines.l2}
+  onChange={handleChange('l2')}
+  style={inputStyle}
+/>
+
+<input
+  className="poem-input"
+  placeholder="三句目（例：水の音）"
+  value={lines.l3}
+  onChange={handleChange('l3')}
+  style={inputStyle}
+/>
+
+{/* 短歌のみ */}
+<input
+  className="poem-input"
+  placeholder="四句目"
+  value={lines.l4}
+  onChange={handleChange('l4')}
+  style={inputStyle}
+/>
+<input
+  className="poem-input"
+  placeholder="五句目"
+  value={lines.l5}
+  onChange={handleChange('l5')}
+  style={inputStyle}
+/>
+
+{/* 署名欄も濃く */}
+<input
+  className="poem-input"
+  placeholder="署名（例：芭蕉）"
+  value={author}
+  onChange={(e) => setAuthor(e.target.value)}
+  style={inputStyle}
+/>
+            )
           </div>
 
           {/* 投稿ボタン */}
