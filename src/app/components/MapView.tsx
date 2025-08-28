@@ -1,30 +1,26 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  MapContainer,
-  TileLayer,
-  CircleMarker,
-  Popup,
-  useMapEvents,
-} from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
+import { supabase } from '@/lib/supabaseClient';
 
 type Mode = 'haiku' | 'tanka';
 
-type Marker = {
+/** DBのpoemsテーブル行 */
+type PoemRow = {
   id: number;
-  lat: number;
-  lon: number;
+  author: string;
   kind: Mode;
   text: string;
-  author: string;      // 署名（投稿時の名前）
-  createdAt: string;   // ISO
-  likedBy: string[];   // 「いとをかし」を押した署名一覧（ローカル）
+  lat: number;
+  lon: number;
+  created_at: string;   // Supabase側の列名に合わせる
+  likes: string[] | null;
 };
 
 export default function MapView() {
-  const [markers, setMarkers] = useState<Marker[]>([]);
+  const [poems, setPoems] = useState<PoemRow[]>([]);
   const [mode, setMode] = useState<Mode>('haiku');
 
   // 句の分割入力
@@ -39,12 +35,30 @@ export default function MapView() {
   // クリックで選んだ座標
   const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(null);
 
+  // 初回：固定署名(myName)をlocalStorageから復元
   useEffect(() => {
-    const saved = localStorage.getItem('chizurashi_myName') || '';
+    const saved = (typeof window !== 'undefined' && localStorage.getItem('chizurashi_myName')) || '';
     if (saved) {
       setMyName(saved);
-      setAuthor(saved); // 投稿署名の初期値にする
+      setAuthor(saved);
     }
+  }, []);
+
+  // 初回：DBから詩を取得
+  useEffect(() => {
+    const fetchPoems = async () => {
+      const { data, error } = await supabase
+        .from('poems')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) {
+        console.error(error);
+        alert('投稿の取得に失敗しました：' + error.message);
+      } else {
+        setPoems((data || []).map((r) => ({ ...r, likes: r.likes ?? [] })));
+      }
+    };
+    fetchPoems();
   }, []);
 
   function Clicker() {
@@ -75,27 +89,31 @@ export default function MapView() {
       .map((s) => s.trim())
       .join('\n');
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!tempPos) return;
     const text = prepareText();
-    const id = Date.now();
     const finalAuthor = (author || myName || '無署名').trim();
 
-    setMarkers((m) => [
-      {
-        id,
-        lat: tempPos.lat,
-        lon: tempPos.lon,
-        kind: mode,
-        text,
-        author: finalAuthor,
-        createdAt: new Date().toISOString(),
-        likedBy: [],
-      },
-      ...m,
-    ]);
+    const { data, error } = await supabase
+      .from('poems')
+      .insert([
+        {
+          author: finalAuthor,
+          kind: mode,
+          text,
+          lat: tempPos.lat,
+          lon: tempPos.lon,
+        },
+      ])
+      .select()
+      .single();
 
-    setLines({ l1: '', l2: '', l3: '', l4: '', l5: '' });
+    if (error) {
+      alert('投稿に失敗しました：' + error.message);
+    } else if (data) {
+      setPoems((prev) => [{ ...data, likes: data.likes ?? [] }, ...prev]);
+      setLines({ l1: '', l2: '', l3: '', l4: '', l5: '' });
+    }
   };
 
   const verticalTextStyle: React.CSSProperties = {
@@ -114,7 +132,7 @@ export default function MapView() {
     textOrientation: 'mixed',
     lineHeight: 1.6,
     fontSize: 12,
-    color: '#333', // ほんの少し濃いめ
+    color: '#333',
   };
 
   const formatDate = (iso: string) =>
@@ -126,46 +144,66 @@ export default function MapView() {
       minute: '2-digit',
     });
 
-  const isOwner = (m: Marker) => myName && m.author === myName;
+  const isOwner = (row: PoemRow) => myName && row.author === myName;
 
-  const toggleItoWokashi = (id: number) => {
+  const toggleItoWokashi = async (row: PoemRow) => {
     if (!myName) {
       alert('まず「あなたの署名（固定）」を設定してください。');
       return;
     }
-    setMarkers((prev) =>
-      prev.map((m) =>
-        m.id !== id
-          ? m
-          : m.likedBy.includes(myName)
-          ? { ...m, likedBy: m.likedBy.filter((n) => n !== myName) }
-          : { ...m, likedBy: [...m.likedBy, myName] }
-      )
-    );
+    const current = row.likes ?? [];
+    const nextLikes = current.includes(myName)
+      ? current.filter((n) => n !== myName)
+      : [...current, myName];
+
+    const { data, error } = await supabase
+      .from('poems')
+      .update({ likes: nextLikes })
+      .eq('id', row.id)
+      .select()
+      .single();
+
+    if (error) {
+      alert('いとをかし更新に失敗：' + error.message);
+    } else if (data) {
+      setPoems((prev) => prev.map((p) => (p.id === row.id ? { ...data, likes: data.likes ?? [] } : p)));
+    }
   };
 
-  const deletePoem = (id: number) => {
-    const target = markers.find((m) => m.id === id);
-    if (!target) return;
-    if (!isOwner(target)) {
+  const deletePoem = async (row: PoemRow) => {
+    if (!isOwner(row)) {
       alert('この投稿を削除できるのは作者本人のみです。');
       return;
     }
-    if (confirm('この歌を削除しますか？')) {
-      setMarkers((prev) => prev.filter((m) => m.id !== id));
+    if (!confirm('この歌を削除しますか？')) return;
+
+    const { error } = await supabase.from('poems').delete().eq('id', row.id);
+    if (error) {
+      alert('削除に失敗しました：' + error.message);
+      return;
     }
+    setPoems((prev) => prev.filter((p) => p.id !== row.id));
   };
 
-  const editPoem = (id: number) => {
-    const target = markers.find((m) => m.id === id);
-    if (!target) return;
-    if (!isOwner(target)) {
+  const editPoem = async (row: PoemRow) => {
+    if (!isOwner(row)) {
       alert('この投稿を編集できるのは作者本人のみです。');
       return;
     }
-    const nextText = prompt('歌を修正', target.text);
-    if (nextText != null && nextText.trim() !== '') {
-      setMarkers((prev) => prev.map((m) => (m.id === id ? { ...m, text: nextText.trim() } : m)));
+    const nextText = prompt('歌を修正', row.text);
+    if (nextText == null || nextText.trim() === '') return;
+
+    const { data, error } = await supabase
+      .from('poems')
+      .update({ text: nextText.trim() })
+      .eq('id', row.id)
+      .select()
+      .single();
+
+    if (error) {
+      alert('更新に失敗しました：' + error.message);
+    } else if (data) {
+      setPoems((prev) => prev.map((p) => (p.id === row.id ? { ...data, likes: data.likes ?? [] } : p)));
     }
   };
 
@@ -179,12 +217,10 @@ export default function MapView() {
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Clicker />
         {tempPos && <CircleMarker center={[tempPos.lat, tempPos.lon]} radius={8} />}
-        {markers.map((m) => (
+        {poems.map((m) => (
           <CircleMarker key={m.id} center={[m.lat, m.lon]} radius={6}>
             <Popup maxWidth={340}>
-              <p style={{ margin: 0, fontWeight: 600 }}>
-                {m.kind === 'haiku' ? '俳句' : '短歌'}
-              </p>
+              <p style={{ margin: 0, fontWeight: 600 }}>{m.kind === 'haiku' ? '俳句' : '短歌'}</p>
 
               {/* 縦書き本文 */}
               <div style={{ marginTop: 6, display: 'inline-block' }}>
@@ -195,30 +231,26 @@ export default function MapView() {
               <div style={metaVerticalStyle}>
                 <span>— {m.author}</span>
                 {'\n'}
-                <span>{formatDate(m.createdAt)}</span>
+                <span>{formatDate(m.created_at)}</span>
               </div>
 
               {/* 操作行 */}
               <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   type="button"
-                  onClick={() => toggleItoWokashi(m.id)}
-                  style={chipButton(m.likedBy.includes(myName))}
+                  onClick={() => toggleItoWokashi(m)}
+                  style={chipButton((m.likes ?? []).includes(myName))}
                   title="いとをかし（いいね）"
                 >
-                  いとをかし {m.likedBy.length > 0 ? `(${m.likedBy.length})` : ''}
+                  いとをかし {(m.likes ?? []).length > 0 ? `(${(m.likes ?? []).length})` : ''}
                 </button>
 
                 {isOwner(m) && (
                   <>
-                    <button type="button" onClick={() => editPoem(m.id)} style={chipButton(false)}>
+                    <button type="button" onClick={() => editPoem(m)} style={chipButton(false)}>
                       編集
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => deletePoem(m.id)}
-                      style={chipButton(false, true)}
-                    >
+                    <button type="button" onClick={() => deletePoem(m)} style={chipButton(false, true)}>
                       削除
                     </button>
                   </>
@@ -257,9 +289,7 @@ export default function MapView() {
               onBlur={() => localStorage.setItem('chizurashi_myName', myName.trim())}
               style={inputStyle}
             />
-            <small style={{ color: '#555' }}>
-              ※ 編集/削除や「いとをかし」に使われます
-            </small>
+            <small style={{ color: '#555' }}>※ 編集/削除や「いとをかし」に使われます</small>
           </div>
 
           {/* 形式切替 & 位置 */}
