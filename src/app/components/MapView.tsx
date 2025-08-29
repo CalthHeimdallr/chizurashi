@@ -31,7 +31,15 @@ export default function MapView() {
   const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(null);
   const [hudOpen, setHudOpen] = useState(false); // ← 出し入れ制御
 
-  // 固定セッション取得＆購読
+  // 現在地/初期表示（本州デフォルト）
+  const HONSHU_CENTER: [number, number] = [37.5, 137.0]; // 本州のだいたい中心
+  const HONSHU_ZOOM = 5;
+
+  const [center, setCenter] = useState<[number, number]>(HONSHU_CENTER);
+  const [zoom, setZoom] = useState<number>(HONSHU_ZOOM);
+  const [myPos, setMyPos] = useState<{ lat: number; lon: number } | null>(null);
+
+  // セッション取得＆購読
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase!.auth.getUser();
@@ -61,6 +69,25 @@ export default function MapView() {
       if (!error) setPoems((data || []).map((r) => ({ ...r, likes: r.likes ?? [] })));
     };
     fetchPoems();
+  }, []);
+
+  // 起動時の現在地取得：成功→現在地中心、失敗→本州全体のまま
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('geolocation' in navigator)) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lon = pos.coords.longitude;
+        setCenter([lat, lon]);
+        setZoom(13); // 市街地が見えるくらい
+        setMyPos({ lat, lon });
+      },
+      () => {
+        // 失敗時は何もしない＝本州デフォルト（center/zoom 初期値）
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+    );
   }, []);
 
   // ===== Supabase 未設定ガード（Hooksの後で判定）=====
@@ -256,10 +283,28 @@ export default function MapView() {
       {/* 認証バー（右上固定） */}
       <AuthBar />
 
-      <MapContainer center={[35.681, 139.767]} zoom={13} style={{ height: '100%', width: '100%' }}>
+      <MapContainer
+        center={center}
+        zoom={zoom}
+        key={`${center[0]}-${center[1]}-${zoom}`} // center/zoom 更新時に再初期化
+        style={{ height: '100%', width: '100%' }}
+      >
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Clicker />
+
+        {/* 現在地（取得できた場合） */}
+        {myPos && (
+          <CircleMarker
+            center={[myPos.lat, myPos.lon]}
+            radius={8}
+            pathOptions={{ color: '#1e90ff', fillColor: '#1e90ff', fillOpacity: 0.6 }}
+          />
+        )}
+
+        {/* 暫定ピン（投稿前） */}
         {tempPos && <CircleMarker center={[tempPos.lat, tempPos.lon]} radius={8} />}
+
+        {/* 投稿ピン */}
         {poems.map((m) => (
           <CircleMarker key={m.id} center={[m.lat, m.lon]} radius={6}>
             <Popup maxWidth={360}>
