@@ -476,51 +476,52 @@ export default function MapView() {
               </small>
             )}
 
-            {/* 句入力欄 */}
-            <input
-              className="poem-input"
-              style={inputStyle}
-              placeholder="一句目（例：古池や）"
-              value={lines.l1}
-              onChange={handleChange('l1')}
-              disabled={!user}
-            />
-            <input
-              className="poem-input"
-              style={inputStyle}
-              placeholder="二句目（例：蛙飛びこむ）"
-              value={lines.l2}
-              onChange={handleChange('l2')}
-              disabled={!user}
-            />
-            <input
-              className="poem-input"
-              style={inputStyle}
-              placeholder="三句目（例：水の音）"
-              value={lines.l3}
-              onChange={handleChange('l3')}
-              disabled={!user}
-            />
-            {mode === 'tanka' && (
-              <>
-                <input
-                  className="poem-input"
-                  style={inputStyle}
-                  placeholder="四句目"
-                  value={lines.l4}
-                  onChange={handleChange('l4')}
-                  disabled={!user}
-                />
-                <input
-                  className="poem-input"
-                  style={inputStyle}
-                  placeholder="五句目"
-                  value={lines.l5}
-                  onChange={handleChange('l5')}
-                  disabled={!user}
-                />
-              </>
-            )}
+            {/* 節入力欄 */}
+<input
+  className="poem-input"
+  style={inputStyle}
+  placeholder="一節目（例：古池や）"
+  value={lines.l1}
+  onChange={handleChange('l1')}
+  disabled={!user}
+/>
+<input
+  className="poem-input"
+  style={inputStyle}
+  placeholder="二節目（例：蛙飛びこむ）"
+  value={lines.l2}
+  onChange={handleChange('l2')}
+  disabled={!user}
+/>
+<input
+  className="poem-input"
+  style={inputStyle}
+  placeholder="三節目（例：水の音）"
+  value={lines.l3}
+  onChange={handleChange('l3')}
+  disabled={!user}
+/>
+{mode === 'tanka' && (
+  <>
+    <input
+      className="poem-input"
+      style={inputStyle}
+      placeholder="四節目"
+      value={lines.l4}
+      onChange={handleChange('l4')}
+      disabled={!user}
+    />
+    <input
+      className="poem-input"
+      style={inputStyle}
+      placeholder="五節目"
+      value={lines.l5}
+      onChange={handleChange('l5')}
+      disabled={!user}
+    />
+  </>
+)}
+
 
             {/* 投稿ボタン */}
             <div>
