@@ -40,7 +40,7 @@ export default function MapView() {
   useEffect(() => {
     if (!supabase) return;
     const fetchPoems = async () => {
-      const { data, error } = await supabase
+      const { data, error } = await supabase!
         .from('poems')
         .select('*')
         .order('created_at', { ascending: false });
@@ -100,7 +100,7 @@ export default function MapView() {
     const text = prepareText();
     const finalAuthor = (author || myName || '無署名').trim();
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from('poems')
       .insert([{ author: finalAuthor, kind: mode, text, lat: tempPos.lat, lon: tempPos.lon }])
       .select()
@@ -126,7 +126,7 @@ export default function MapView() {
       ? current.filter((n) => n !== myName)
       : [...current, myName];
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from('poems')
       .update({ likes: nextLikes })
       .eq('id', row.id)
@@ -144,7 +144,7 @@ export default function MapView() {
     if (!isOwner(row)) return;
     if (!confirm('この歌を削除しますか？')) return;
 
-    const { error } = await supabase.from('poems').delete().eq('id', row.id);
+    const { error } = await supabase!.from('poems').delete().eq('id', row.id);
     if (error) {
       alert('削除に失敗しました: ' + error.message);
     } else {
@@ -157,7 +157,7 @@ export default function MapView() {
     const nextText = prompt('歌を修正', row.text);
     if (!nextText) return;
 
-    const { data, error } = await supabase
+    const { data, error } = await supabase!
       .from('poems')
       .update({ text: nextText.trim() })
       .eq('id', row.id)
