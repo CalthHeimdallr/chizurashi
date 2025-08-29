@@ -223,31 +223,44 @@ export default function MapView() {
       </MapContainer>
 
       {/* HUD */}
-      <div style={{ position: 'fixed', bottom: 12, left: 12, right: 12, background: '#fff', padding: 12 }}>
-        <div>
-          <input
-            placeholder="あなたの署名（固定）"
-            value={myName}
-            onChange={(e) => setMyName(e.target.value)}
-            onBlur={() => localStorage.setItem('chizurashi_myName', myName.trim())}
-          />
-          <button onClick={() => setMode('haiku')}>俳句</button>
-          <button onClick={() => setMode('tanka')}>短歌</button>
-        </div>
-        <input placeholder="投稿署名" value={author} onChange={(e) => setAuthor(e.target.value)} />
-        <input placeholder="一句目" value={lines.l1} onChange={handleChange('l1')} />
-        <input placeholder="二句目" value={lines.l2} onChange={handleChange('l2')} />
-        <input placeholder="三句目" value={lines.l3} onChange={handleChange('l3')} />
-        {mode === 'tanka' && (
-          <>
-            <input placeholder="四句目" value={lines.l4} onChange={handleChange('l4')} />
-            <input placeholder="五句目" value={lines.l5} onChange={handleChange('l5')} />
-          </>
-        )}
-        <button disabled={!canSubmit} onClick={handleSubmit}>
-          この場所に詠む
-        </button>
-      </div>
+<div
+  style={{
+    position: 'fixed',
+    bottom: 12,
+    left: 12,
+    right: 12,
+    background: '#fff',
+    padding: 12,
+    zIndex: 1000,   // ✅ 追加: 最前面に表示
+    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+    borderRadius: 8,
+  }}
+>
+  <div>
+    <input
+      placeholder="あなたの署名（固定）"
+      value={myName}
+      onChange={(e) => setMyName(e.target.value)}
+      onBlur={() => localStorage.setItem('chizurashi_myName', myName.trim())}
+    />
+    <button onClick={() => setMode('haiku')}>俳句</button>
+    <button onClick={() => setMode('tanka')}>短歌</button>
+  </div>
+  <input placeholder="投稿署名" value={author} onChange={(e) => setAuthor(e.target.value)} />
+  <input placeholder="一句目" value={lines.l1} onChange={handleChange('l1')} />
+  <input placeholder="二句目" value={lines.l2} onChange={handleChange('l2')} />
+  <input placeholder="三句目" value={lines.l3} onChange={handleChange('l3')} />
+  {mode === 'tanka' && (
+    <>
+      <input placeholder="四句目" value={lines.l4} onChange={handleChange('l4')} />
+      <input placeholder="五句目" value={lines.l5} onChange={handleChange('l5')} />
+    </>
+  )}
+  <button disabled={!canSubmit} onClick={handleSubmit}>
+    この場所に詠む
+  </button>
+</div>
+
     </div>
   );
 }
