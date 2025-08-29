@@ -231,36 +231,138 @@ export default function MapView() {
     right: 12,
     background: '#fff',
     padding: 12,
-    zIndex: 1000,   // ✅ 追加: 最前面に表示
-    boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-    borderRadius: 8,
+    zIndex: 1000,                      // 地図より前面
+    boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
+    borderRadius: 12,
+    pointerEvents: 'auto',
   }}
 >
-  <div>
-    <input
-      placeholder="あなたの署名（固定）"
-      value={myName}
-      onChange={(e) => setMyName(e.target.value)}
-      onBlur={() => localStorage.setItem('chizurashi_myName', myName.trim())}
-    />
-    <button onClick={() => setMode('haiku')}>俳句</button>
-    <button onClick={() => setMode('tanka')}>短歌</button>
-  </div>
-  <input placeholder="投稿署名" value={author} onChange={(e) => setAuthor(e.target.value)} />
-  <input placeholder="一句目" value={lines.l1} onChange={handleChange('l1')} />
-  <input placeholder="二句目" value={lines.l2} onChange={handleChange('l2')} />
-  <input placeholder="三句目" value={lines.l3} onChange={handleChange('l3')} />
-  {mode === 'tanka' && (
-    <>
-      <input placeholder="四句目" value={lines.l4} onChange={handleChange('l4')} />
-      <input placeholder="五句目" value={lines.l5} onChange={handleChange('l5')} />
-    </>
-  )}
-  <button disabled={!canSubmit} onClick={handleSubmit}>
-    この場所に詠む
-  </button>
-</div>
-
+  <div style={{ display: 'grid', gap: 8, maxWidth: 880, margin: '0 auto' }}>
+    {/* あなたの署名（固定） */}
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <label style={{ minWidth: 120, fontWeight: 600 }}>あなたの署名（固定）</label>
+      <input
+        className="poem-input"
+        style={inputStyle}
+        placeholder="例：芭蕉"
+        value={myName}
+        onChange={(e) => setMyName(e.target.value)}
+        onBlur={() => localStorage.setItem('chizurashi_myName', myName.trim())}
+      />
+      <small style={{ color: '#555' }}>※ 編集/削除や「いとをかし」に使われます</small>
     </div>
+
+    {/* 形式切替 & 位置 */}
+    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <button
+          type="button"
+          onClick={() => setMode('haiku')}
+          aria-pressed={mode === 'haiku'}
+          style={{
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: mode === 'haiku' ? '2px solid #111' : '1px solid #bbb',
+            background: mode === 'haiku' ? '#111' : '#fff',
+            color: mode === 'haiku' ? '#fff' : '#111',
+            cursor: 'pointer',
+          }}
+        >
+          俳句（5-7-5）
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode('tanka')}
+          aria-pressed={mode === 'tanka'}
+          style={{
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: mode === 'tanka' ? '2px solid #111' : '1px solid #bbb',
+            background: mode === 'tanka' ? '#111' : '#fff',
+            color: mode === 'tanka' ? '#fff' : '#111',
+            cursor: 'pointer',
+          }}
+        >
+          短歌（5-7-5-7-7）
+        </button>
+      </div>
+      <div style={{ marginLeft: 'auto', fontSize: 12, color: '#444' }}>
+        {tempPos
+          ? `選択位置: ${tempPos.lat.toFixed(5)}, ${tempPos.lon.toFixed(5)}（地図クリックで変更）`
+          : '地図をクリックして場所を選択'}
+      </div>
+    </div>
+
+    {/* 投稿署名 */}
+    <input
+      className="poem-input"
+      style={inputStyle}
+      placeholder="署名（投稿ごとに上書き可）"
+      value={author}
+      onChange={(e) => setAuthor(e.target.value)}
+    />
+
+    {/* 句入力欄 */}
+    <input
+      className="poem-input"
+      style={inputStyle}
+      placeholder="一句目（例：古池や）"
+      value={lines.l1}
+      onChange={handleChange('l1')}
+    />
+    <input
+      className="poem-input"
+      style={inputStyle}
+      placeholder="二句目（例：蛙飛びこむ）"
+      value={lines.l2}
+      onChange={handleChange('l2')}
+    />
+    <input
+      className="poem-input"
+      style={inputStyle}
+      placeholder="三句目（例：水の音）"
+      value={lines.l3}
+      onChange={handleChange('l3')}
+    />
+    {mode === 'tanka' && (
+      <>
+        <input
+          className="poem-input"
+          style={inputStyle}
+          placeholder="四句目"
+          value={lines.l4}
+          onChange={handleChange('l4')}
+        />
+        <input
+          className="poem-input"
+          style={inputStyle}
+          placeholder="五句目"
+          value={lines.l5}
+          onChange={handleChange('l5')}
+        />
+      </>
+    )}
+
+    {/* 投稿ボタン */}
+    <div>
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={!canSubmit}
+        style={{
+          padding: '10px 16px',
+          borderRadius: 10,
+          border: 'none',
+          background: canSubmit ? '#111' : '#999',
+          color: '#fff',
+          cursor: canSubmit ? 'pointer' : 'not-allowed',
+          fontWeight: 700,
+        }}
+        title={!tempPos ? '投稿前に地図をクリックして場所を選んでください' : ''}
+      >
+        この場所に詠む
+      </button>
+    </div>
+
   );
 }

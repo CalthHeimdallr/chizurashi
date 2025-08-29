@@ -27,20 +27,26 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* 入力後の本文色（黒） */
+/* 入力後の文字色（再確認用。inline styleと一致させています） */
 .poem-input {
   color: #000000;
 }
 
-/* 入力前のプレースホルダ色（中間トーン） */
+/* 入力前の仮文字（プレースホルダ）色：#2b2b2b に固定 */
 .poem-input::placeholder {
-  color: #2b2b2b;
-  opacity: 1;        /* ブラウザ既定の薄さを上書き */
-  font-weight: 500;  /* 必要なければ消してOK */
+  color: #999999;
+  opacity: 1;
 }
+
+/* フォーカス時は枠をさらにくっきり（任意） */
+.poem-input:focus {
+  border-color: #111;
+}
+
 
 /* （任意）オートフィル時も黒に固定したい場合 */
 input.poem-input:-webkit-autofill {
   -webkit-text-fill-color: #000000;
 }
+
 
