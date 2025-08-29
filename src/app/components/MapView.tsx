@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, useMapEvents } from 'react-leaflet';
 import type { LeafletMouseEvent } from 'leaflet';
 import { supabase } from '../../lib/supabaseClient';
+import type { User } from '@supabase/supabase-js';
+import AuthBar from './AuthBar';
 
 type Mode = 'haiku' | 'tanka';
 
@@ -15,29 +17,39 @@ type PoemRow = {
   lat: number;
   lon: number;
   created_at: string;
-  likes: string[] | null;
+  likes: string[] | null; // user.id を入れる
+  user_id: string | null; // 著者のSupabaseユーザーID
 };
 
 export default function MapView() {
-  // 1) Hooksは常に最初に
+  // Hooksは先に定義
+  const [user, setUser] = useState<User | null>(null);
   const [poems, setPoems] = useState<PoemRow[]>([]);
   const [mode, setMode] = useState<Mode>('haiku');
   const [lines, setLines] = useState({ l1: '', l2: '', l3: '', l4: '', l5: '' });
   const [author, setAuthor] = useState<string>('');
-  const [myName, setMyName] = useState<string>('');
   const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(null);
 
-  // 2) 固定署名を復元
+  // セッション取得＆購読
   useEffect(() => {
-    const saved =
-      (typeof window !== 'undefined' && localStorage.getItem('chizurashi_myName')) || '';
-    if (saved) {
-      setMyName(saved);
-      setAuthor(saved);
-    }
+    const init = async () => {
+      const { data } = await supabase!.auth.getUser();
+      setUser(data.user ?? null);
+      if (data.user) {
+        const defaultName = data.user.user_metadata?.name || data.user.email || '';
+        setAuthor(defaultName);
+      }
+    };
+    init();
+    const { data: sub } = supabase!.auth.onAuthStateChange((_e, session) => {
+      const u = session?.user ?? null;
+      setUser(u);
+      if (u) setAuthor(u.user_metadata?.name || u.email || '');
+    });
+    return () => sub.subscription.unsubscribe();
   }, []);
 
-  // 3) 初回ロードで詩を取得（supabase未設定ならスキップ）
+  // 初回ロードで詩を取得
   useEffect(() => {
     if (!supabase) return;
     const fetchPoems = async () => {
@@ -45,16 +57,12 @@ export default function MapView() {
         .from('poems')
         .select('*')
         .order('created_at', { ascending: false });
-      if (error) {
-        console.error(error);
-      } else {
-        setPoems((data || []).map((r) => ({ ...r, likes: r.likes ?? [] })));
-      }
+      if (!error) setPoems((data || []).map((r) => ({ ...r, likes: r.likes ?? [] })));
     };
     fetchPoems();
   }, []);
 
-  // 4) supabase未設定時の案内（Hooksの後に判定）
+  // supabase null の場合（env未設定）
   if (!supabase) {
     return (
       <div style={{ padding: 16 }}>
@@ -78,6 +86,7 @@ export default function MapView() {
   }
 
   const canSubmit: boolean =
+    !!user && // ログイン必須（RLSのため）
     !!tempPos &&
     !!lines.l1.trim() &&
     !!lines.l2.trim() &&
@@ -96,14 +105,24 @@ export default function MapView() {
       .map((s) => s.trim())
       .join('\n');
 
+  // 投稿
   const handleSubmit = async () => {
-    if (!tempPos) return;
+    if (!tempPos || !user) return;
     const text = prepareText();
-    const finalAuthor = (author || myName || '無署名').trim();
+    const displayAuthor = (author || user.user_metadata?.name || user.email || '無署名').trim();
 
     const { data, error } = await supabase!
       .from('poems')
-      .insert([{ author: finalAuthor, kind: mode, text, lat: tempPos.lat, lon: tempPos.lon }])
+      .insert([
+        {
+          author: displayAuthor,
+          kind: mode,
+          text,
+          lat: tempPos.lat,
+          lon: tempPos.lon,
+          user_id: user.id, // RLS のため必須
+        },
+      ])
       .select()
       .single();
 
@@ -115,17 +134,19 @@ export default function MapView() {
     }
   };
 
-  const isOwner = (row: PoemRow) => !!myName && row.author === myName;
+  // 権限判定：DB上の user_id と現在の user.id が一致したら編集/削除可
+  const isOwner = (row: PoemRow) => !!user && row.user_id === user.id;
 
+  // いとをかし（user.idベース）
   const toggleItoWokashi = async (row: PoemRow) => {
-    if (!myName) {
-      alert('まず「あなたの署名（固定）」を設定してください。');
+    if (!user) {
+      alert('「いとをかし」にはログインが必要です。');
       return;
     }
     const current = row.likes ?? [];
-    const nextLikes = current.includes(myName)
-      ? current.filter((n) => n !== myName)
-      : [...current, myName];
+    const nextLikes = current.includes(user.id)
+      ? current.filter((n) => n !== user.id)
+      : [...current, user.id];
 
     const { data, error } = await supabase!
       .from('poems')
@@ -143,6 +164,7 @@ export default function MapView() {
     }
   };
 
+  // 削除
   const deletePoem = async (row: PoemRow) => {
     if (!isOwner(row)) return;
     if (!confirm('この歌を削除しますか？')) return;
@@ -155,6 +177,7 @@ export default function MapView() {
     }
   };
 
+  // 編集
   const editPoem = async (row: PoemRow) => {
     if (!isOwner(row)) return;
     const nextText = prompt('歌を修正', row.text);
@@ -204,16 +227,31 @@ export default function MapView() {
     color: '#333',
   };
 
-  // 5) ここから描画
+  const inputStyle: React.CSSProperties = {
+    display: 'block',
+    width: '100%',
+    margin: '2px 0',
+    padding: '8px 10px',
+    border: '1.5px solid #555',
+    borderRadius: 10,
+    fontSize: 14,
+    color: '#000000',
+    background: '#fff',
+    outline: 'none',
+  };
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
+      {/* 認証バー（右上固定） */}
+      <AuthBar />
+
       <MapContainer center={[35.681, 139.767]} zoom={13} style={{ height: '100%', width: '100%' }}>
         <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
         <Clicker />
         {tempPos && <CircleMarker center={[tempPos.lat, tempPos.lon]} radius={8} />}
         {poems.map((m) => (
           <CircleMarker key={m.id} center={[m.lat, m.lon]} radius={6}>
-            <Popup maxWidth={340}>
+            <Popup maxWidth={360}>
               <p style={{ margin: 0, fontWeight: 600 }}>{m.kind === 'haiku' ? '俳句' : '短歌'}</p>
 
               {/* 本文（縦書き） */}
@@ -303,20 +341,6 @@ export default function MapView() {
         }}
       >
         <div style={{ display: 'grid', gap: 8, maxWidth: 880, margin: '0 auto' }}>
-          {/* 固定署名 */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ minWidth: 120, fontWeight: 600 }}>あなたの署名（固定）</label>
-            <input
-              className="poem-input"
-              style={inputStyle}
-              placeholder="例：芭蕉"
-              value={myName}
-              onChange={(e) => setMyName(e.target.value)}
-              onBlur={() => localStorage.setItem('chizurashi_myName', myName.trim())}
-            />
-            <small style={{ color: '#555' }}>※ 編集/削除や「いとをかし」に使われます</small>
-          </div>
-
           {/* 形式切替 & 位置 */}
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -358,14 +382,20 @@ export default function MapView() {
             </div>
           </div>
 
-          {/* 投稿署名 */}
+          {/* 投稿署名（任意変更可。表示用のみ） */}
           <input
             className="poem-input"
             style={inputStyle}
-            placeholder="署名（投稿ごとに上書き可）"
+            placeholder="署名（表示名）"
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
+            disabled={!user}
           />
+          {!user && (
+            <small style={{ color: '#a00' }}>
+              ※ 投稿にはログインが必要です（右上からGoogle/GitHub/Discordでログイン）
+            </small>
+          )}
 
           {/* 句入力欄 */}
           <input
@@ -374,6 +404,7 @@ export default function MapView() {
             placeholder="一句目（例：古池や）"
             value={lines.l1}
             onChange={handleChange('l1')}
+            disabled={!user}
           />
           <input
             className="poem-input"
@@ -381,6 +412,7 @@ export default function MapView() {
             placeholder="二句目（例：蛙飛びこむ）"
             value={lines.l2}
             onChange={handleChange('l2')}
+            disabled={!user}
           />
           <input
             className="poem-input"
@@ -388,6 +420,7 @@ export default function MapView() {
             placeholder="三句目（例：水の音）"
             value={lines.l3}
             onChange={handleChange('l3')}
+            disabled={!user}
           />
           {mode === 'tanka' && (
             <>
@@ -397,6 +430,7 @@ export default function MapView() {
                 placeholder="四句目"
                 value={lines.l4}
                 onChange={handleChange('l4')}
+                disabled={!user}
               />
               <input
                 className="poem-input"
@@ -404,6 +438,7 @@ export default function MapView() {
                 placeholder="五句目"
                 value={lines.l5}
                 onChange={handleChange('l5')}
+                disabled={!user}
               />
             </>
           )}
@@ -433,17 +468,3 @@ export default function MapView() {
     </div>
   );
 }
-
-// 入力欄の共通スタイル（枠と文字をはっきり）
-const inputStyle: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  margin: '2px 0',
-  padding: '8px 10px',
-  border: '1.5px solid #555',
-  borderRadius: 10,
-  fontSize: 14,
-  color: '#000000',
-  background: '#fff',
-  outline: 'none',
-};
