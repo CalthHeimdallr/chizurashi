@@ -17,20 +17,21 @@ type PoemRow = {
   lat: number;
   lon: number;
   created_at: string;
-  likes: string[] | null; // user.id を入れる
-  user_id: string | null; // 著者のSupabaseユーザーID
+  likes: string[] | null;  // user.id の配列
+  user_id: string | null;  // 著者のSupabaseユーザーID
 };
 
 export default function MapView() {
-  // Hooksは先に定義
+  // ===== Hooks（必ず先頭で定義）=====
   const [user, setUser] = useState<User | null>(null);
   const [poems, setPoems] = useState<PoemRow[]>([]);
   const [mode, setMode] = useState<Mode>('haiku');
   const [lines, setLines] = useState({ l1: '', l2: '', l3: '', l4: '', l5: '' });
   const [author, setAuthor] = useState<string>('');
   const [tempPos, setTempPos] = useState<{ lat: number; lon: number } | null>(null);
+  const [hudOpen, setHudOpen] = useState(false); // ← 出し入れ制御
 
-  // セッション取得＆購読
+  // 固定セッション取得＆購読
   useEffect(() => {
     const init = async () => {
       const { data } = await supabase!.auth.getUser();
@@ -49,7 +50,7 @@ export default function MapView() {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  // 初回ロードで詩を取得
+  // 初回ロードで詩を取得（supabase未設定ならスキップ）
   useEffect(() => {
     if (!supabase) return;
     const fetchPoems = async () => {
@@ -62,7 +63,7 @@ export default function MapView() {
     fetchPoems();
   }, []);
 
-  // supabase null の場合（env未設定）
+  // ===== Supabase 未設定ガード（Hooksの後で判定）=====
   if (!supabase) {
     return (
       <div style={{ padding: 16 }}>
@@ -75,18 +76,19 @@ export default function MapView() {
     );
   }
 
-  // 地図クリックで位置確定
+  // 地図クリックで位置確定＋HUDを開く
   function Clicker() {
     useMapEvents({
       click(e: LeafletMouseEvent) {
         setTempPos({ lat: e.latlng.lat, lon: e.latlng.lng });
+        setHudOpen(true); // ← ピンを刺したら開く
       },
     });
     return null;
   }
 
   const canSubmit: boolean =
-    !!user && // ログイン必須（RLSのため）
+    !!user && // RLSのため投稿はログイン必須
     !!tempPos &&
     !!lines.l1.trim() &&
     !!lines.l2.trim() &&
@@ -105,6 +107,13 @@ export default function MapView() {
       .map((s) => s.trim())
       .join('\n');
 
+  // HUDを閉じる（×／投稿成功で使用）
+  const closeHUD = () => {
+    setHudOpen(false);
+    setTempPos(null); // ピンも消す（残したいならこの行を外す）
+    setLines({ l1: '', l2: '', l3: '', l4: '', l5: '' });
+  };
+
   // 投稿
   const handleSubmit = async () => {
     if (!tempPos || !user) return;
@@ -120,7 +129,7 @@ export default function MapView() {
           text,
           lat: tempPos.lat,
           lon: tempPos.lon,
-          user_id: user.id, // RLS のため必須
+          user_id: user.id, // RLSのため必須
         },
       ])
       .select()
@@ -131,10 +140,11 @@ export default function MapView() {
     } else if (data) {
       setPoems((prev) => [{ ...data, likes: data.likes ?? [] }, ...prev]);
       setLines({ l1: '', l2: '', l3: '', l4: '', l5: '' });
+      closeHUD(); // ← 投稿後は収納
     }
   };
 
-  // 権限判定：DB上の user_id と現在の user.id が一致したら編集/削除可
+  // 権限判定
   const isOwner = (row: PoemRow) => !!user && row.user_id === user.id;
 
   // いとをかし（user.idベース）
@@ -240,6 +250,7 @@ export default function MapView() {
     outline: 'none',
   };
 
+  // ===== 描画 =====
   return (
     <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
       {/* 認証バー（右上固定） */}
@@ -325,146 +336,189 @@ export default function MapView() {
         ))}
       </MapContainer>
 
-      {/* HUD（前面固定） */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 12,
-          left: 12,
-          right: 12,
-          background: '#fff',
-          padding: 12,
-          zIndex: 1000,
-          boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
-          borderRadius: 12,
-          pointerEvents: 'auto',
-        }}
-      >
-        <div style={{ display: 'grid', gap: 8, maxWidth: 880, margin: '0 auto' }}>
-          {/* 形式切替 & 位置 */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', gap: 8 }}>
+      {/* HUD（前面固定）— ピンを刺したら表示、×または投稿で収納 */}
+      {hudOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 12,
+            left: 12,
+            right: 12,
+            background: '#fff',
+            padding: 12,
+            zIndex: 1000,
+            boxShadow: '0 6px 24px rgba(0,0,0,0.12)',
+            borderRadius: 12,
+            pointerEvents: 'auto',
+          }}
+        >
+          {/* ×ボタン */}
+          <button
+            onClick={closeHUD}
+            aria-label="閉じる"
+            title="閉じる"
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #bbb',
+              background: '#fff',
+              cursor: 'pointer',
+              fontWeight: 700,
+              lineHeight: '26px',
+            }}
+          >
+            ×
+          </button>
+
+          <div style={{ display: 'grid', gap: 8, maxWidth: 880, margin: '0 auto' }}>
+            {/* 形式切替 & 位置 */}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => setMode('haiku')}
+                  aria-pressed={mode === 'haiku'}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: mode === 'haiku' ? '2px solid #111' : '1px solid #bbb',
+                    background: mode === 'haiku' ? '#111' : '#fff',
+                    color: mode === 'haiku' ? '#fff' : '#111',
+                    cursor: 'pointer',
+                  }}
+                >
+                  俳句（5-7-5）
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('tanka')}
+                  aria-pressed={mode === 'tanka'}
+                  style={{
+                    padding: '8px 12px',
+                    borderRadius: 8,
+                    border: mode === 'tanka' ? '2px solid #111' : '1px solid #bbb',
+                    background: mode === 'tanka' ? '#111' : '#fff',
+                    color: mode === 'tanka' ? '#fff' : '#111',
+                    cursor: 'pointer',
+                  }}
+                >
+                  短歌（5-7-5-7-7）
+                </button>
+              </div>
+              <div style={{ marginLeft: 'auto', fontSize: 12, color: '#444' }}>
+                {tempPos
+                  ? `選択位置: ${tempPos.lat.toFixed(5)}, ${tempPos.lon.toFixed(5)}（地図クリックで変更）`
+                  : '地図をクリックして場所を選択'}
+              </div>
+            </div>
+
+            {/* 投稿署名（表示名） */}
+            <input
+              className="poem-input"
+              style={inputStyle}
+              placeholder="署名（表示名）"
+              value={author}
+              onChange={(e) => setAuthor(e.target.value)}
+              disabled={!user}
+            />
+            {!user && (
+              <small style={{ color: '#a00' }}>
+                ※ 投稿にはログインが必要です（右上からGoogle/GitHub/Discordでログイン）
+              </small>
+            )}
+
+            {/* 句入力欄 */}
+            <input
+              className="poem-input"
+              style={inputStyle}
+              placeholder="一句目（例：古池や）"
+              value={lines.l1}
+              onChange={handleChange('l1')}
+              disabled={!user}
+            />
+            <input
+              className="poem-input"
+              style={inputStyle}
+              placeholder="二句目（例：蛙飛びこむ）"
+              value={lines.l2}
+              onChange={handleChange('l2')}
+              disabled={!user}
+            />
+            <input
+              className="poem-input"
+              style={inputStyle}
+              placeholder="三句目（例：水の音）"
+              value={lines.l3}
+              onChange={handleChange('l3')}
+              disabled={!user}
+            />
+            {mode === 'tanka' && (
+              <>
+                <input
+                  className="poem-input"
+                  style={inputStyle}
+                  placeholder="四句目"
+                  value={lines.l4}
+                  onChange={handleChange('l4')}
+                  disabled={!user}
+                />
+                <input
+                  className="poem-input"
+                  style={inputStyle}
+                  placeholder="五句目"
+                  value={lines.l5}
+                  onChange={handleChange('l5')}
+                  disabled={!user}
+                />
+              </>
+            )}
+
+            {/* 投稿ボタン */}
+            <div>
               <button
                 type="button"
-                onClick={() => setMode('haiku')}
-                aria-pressed={mode === 'haiku'}
+                onClick={handleSubmit}
+                disabled={!canSubmit}
                 style={{
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  border: mode === 'haiku' ? '2px solid #111' : '1px solid #bbb',
-                  background: mode === 'haiku' ? '#111' : '#fff',
-                  color: mode === 'haiku' ? '#fff' : '#111',
-                  cursor: 'pointer',
+                  padding: '10px 16px',
+                  borderRadius: 10,
+                  border: 'none',
+                  background: canSubmit ? '#111' : '#999',
+                  color: '#fff',
+                  cursor: canSubmit ? 'pointer' : 'not-allowed',
+                  fontWeight: 700,
                 }}
+                title={!tempPos ? '投稿前に地図をクリックして場所を選んでください' : ''}
               >
-                俳句（5-7-5）
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('tanka')}
-                aria-pressed={mode === 'tanka'}
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 8,
-                  border: mode === 'tanka' ? '2px solid #111' : '1px solid #bbb',
-                  background: mode === 'tanka' ? '#111' : '#fff',
-                  color: mode === 'tanka' ? '#fff' : '#111',
-                  cursor: 'pointer',
-                }}
-              >
-                短歌（5-7-5-7-7）
+                この場所に詠む
               </button>
             </div>
-            <div style={{ marginLeft: 'auto', fontSize: 12, color: '#444' }}>
-              {tempPos
-                ? `選択位置: ${tempPos.lat.toFixed(5)}, ${tempPos.lon.toFixed(5)}（地図クリックで変更）`
-                : '地図をクリックして場所を選択'}
-            </div>
-          </div>
-
-          {/* 投稿署名（任意変更可。表示用のみ） */}
-          <input
-            className="poem-input"
-            style={inputStyle}
-            placeholder="署名（表示名）"
-            value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            disabled={!user}
-          />
-          {!user && (
-            <small style={{ color: '#a00' }}>
-              ※ 投稿にはログインが必要です（右上からGoogle/GitHub/Discordでログイン）
-            </small>
-          )}
-
-          {/* 句入力欄 */}
-          <input
-            className="poem-input"
-            style={inputStyle}
-            placeholder="一句目（例：古池や）"
-            value={lines.l1}
-            onChange={handleChange('l1')}
-            disabled={!user}
-          />
-          <input
-            className="poem-input"
-            style={inputStyle}
-            placeholder="二句目（例：蛙飛びこむ）"
-            value={lines.l2}
-            onChange={handleChange('l2')}
-            disabled={!user}
-          />
-          <input
-            className="poem-input"
-            style={inputStyle}
-            placeholder="三句目（例：水の音）"
-            value={lines.l3}
-            onChange={handleChange('l3')}
-            disabled={!user}
-          />
-          {mode === 'tanka' && (
-            <>
-              <input
-                className="poem-input"
-                style={inputStyle}
-                placeholder="四句目"
-                value={lines.l4}
-                onChange={handleChange('l4')}
-                disabled={!user}
-              />
-              <input
-                className="poem-input"
-                style={inputStyle}
-                placeholder="五句目"
-                value={lines.l5}
-                onChange={handleChange('l5')}
-                disabled={!user}
-              />
-            </>
-          )}
-
-          {/* 投稿ボタン */}
-          <div>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={!canSubmit}
-              style={{
-                padding: '10px 16px',
-                borderRadius: 10,
-                border: 'none',
-                background: canSubmit ? '#111' : '#999',
-                color: '#fff',
-                cursor: canSubmit ? 'pointer' : 'not-allowed',
-                fontWeight: 700,
-              }}
-              title={!tempPos ? '投稿前に地図をクリックして場所を選んでください' : ''}
-            >
-              この場所に詠む
-            </button>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* HUDが閉じている時のガイド（任意） */}
+      {!hudOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 16,
+            left: 16,
+            zIndex: 900,
+            background: 'rgba(255,255,255,0.92)',
+            border: '1px solid #ddd',
+            padding: '8px 10px',
+            borderRadius: 8,
+            fontSize: 12,
+          }}
+        >
+          地図をクリックして、この場所に歌を詠む
+        </div>
+      )}
     </div>
   );
 }
